@@ -20,6 +20,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
   const [hasVoted, setHasVoted] = useState(false);
   const [chancellorPolicies, setChancellorPolicies] = useState([]);
   const [hasDiscarded, setHasDiscarded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (initialGameState) {
@@ -44,6 +45,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
     socket.on('presidentDiscardConfirmed', (data) => {
       setHasDiscarded(true);
       setPolicies([]);
+      setIsLoading(false);
     });
 
     socket.on('chancellorNominated', (state) => {
@@ -58,6 +60,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       setPhase(result.phase);
       if (result.phase === GAME_PHASES.LEGISLATIVE) {
         setPolicies(result.policies);
+        setHasDiscarded(false);
       }
       if (result.nextPresident) {
         setCurrentPresident(result.nextPresident);
@@ -82,6 +85,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       setEnactedPolicies(data.enactedPolicies);
       setPolicies([]);
       setChancellorPolicies([]);
+      setHasDiscarded(false);
     });
 
     socket.on('newElection', (data) => {
@@ -99,12 +103,18 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
 
     socket.on('gameOver', (result) => {
       setPhase(GAME_PHASES.GAME_OVER);
-      setGameState({ ...gameState, result });
+      setGameState(prevState => ({ ...prevState, result }));
     });
 
     socket.on('presidentDraw', (data) => {
       setPolicies(data.policies);
       setPhase(GAME_PHASES.LEGISLATIVE);
+      setHasDiscarded(false);
+    });
+
+    socket.on('error', (error) => {
+      console.error('Game error:', error);
+      setIsLoading(false);
     });
 
     return () => {
@@ -117,8 +127,9 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       socket.off('gameOver');
       socket.off('newElection');
       socket.off('presidentDraw');
+      socket.off('error');
     };
-  }, [socket, gameState]);
+  }, [socket, lobby.players]);
 
   const handleNominateChancellor = (playerId) => {
     socket.emit('nominateChancellor', { lobbyCode: lobby.code, chancellorId: playerId });
@@ -130,6 +141,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
   };
 
   const handleDiscardPolicy = (policy) => {
+    setIsLoading(true);
     socket.emit('discardPolicy', { lobbyCode: lobby.code, policy });
   };
 
@@ -223,11 +235,12 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
               <button
                 key={index}
                 onClick={() => handleDiscardPolicy(policy)}
+                disabled={isLoading}
                 className={`w-full py-2 px-4 rounded-md text-white ${
                   policy === 'liberal' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
-                }`}
+                } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                Discard {policy} Policy
+                {isLoading ? 'Processing...' : `Discard ${policy} Policy`}
               </button>
             ))}
           </div>
