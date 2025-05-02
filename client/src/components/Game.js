@@ -78,6 +78,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
 
     socket.on('chancellorChoose', (data) => {
       setChancellorPolicies(data.policies);
+      setIsChancellor(true);
     });
 
     socket.on('policyEnacted', (data) => {
