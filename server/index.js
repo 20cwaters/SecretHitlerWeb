@@ -3,6 +3,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const { assignRoles, getRoleInfo, ROLES } = require('./game/roles');
+const { PolicyDeck, POLICY_TYPES } = require('./game/deck');
+const { GameState, GAME_PHASES, VICTORY_CONDITIONS } = require('./game/gameState');
 
 const app = express();
 app.use(cors());
@@ -22,8 +25,9 @@ const io = new Server(server, {
   }
 });
 
-// In-memory store for lobbies
+// In-memory store for lobbies and games
 const lobbies = new Map();
+const games = new Map();
 
 // Generate a random 5-character lobby code
 function generateLobbyCode() {
@@ -69,6 +73,156 @@ io.on('connection', (socket) => {
     console.log(`Player ${playerName} joined lobby ${lobbyCode}`);
   });
 
+  socket.on('startGame', ({ lobbyCode }) => {
+    const lobby = lobbies.get(lobbyCode);
+    if (!lobby || lobby.host !== socket.id) {
+      socket.emit('error', { message: 'Not authorized to start game' });
+      return;
+    }
+
+    try {
+      // Assign roles
+      const playerRoles = assignRoles(lobby.players);
+      
+      // Create game state
+      const gameState = new GameState(lobby.players);
+      const policyDeck = new PolicyDeck();
+      
+      // Store game state
+      games.set(lobbyCode, { gameState, policyDeck, playerRoles });
+      
+      // Update lobby status
+      lobby.status = 'in_progress';
+      
+      // Send roles to players
+      lobby.players.forEach(player => {
+        const roleInfo = getRoleInfo(playerRoles[player.id].role, playerRoles);
+        io.to(player.id).emit('roleAssigned', roleInfo);
+      });
+
+      // Start election phase
+      const president = gameState.getCurrentPresident();
+      io.to(lobbyCode).emit('gameStarted', {
+        president: president,
+        phase: GAME_PHASES.ELECTION
+      });
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('nominateChancellor', ({ lobbyCode, chancellorId }) => {
+    const game = games.get(lobbyCode);
+    if (!game) return;
+
+    const { gameState } = game;
+    gameState.setChancellorCandidate(chancellorId);
+    
+    io.to(lobbyCode).emit('chancellorNominated', {
+      chancellor: chancellorId,
+      phase: GAME_PHASES.ELECTION
+    });
+  });
+
+  socket.on('castVote', ({ lobbyCode, vote }) => {
+    const game = games.get(lobbyCode);
+    if (!game) return;
+
+    const { gameState } = game;
+    gameState.castVote(socket.id, vote);
+
+    // Check if all votes are in
+    const allVotesIn = Object.keys(gameState.electionTracker.votes).length === gameState.players.length;
+    if (allVotesIn) {
+      const result = gameState.getVoteResult();
+      if (result) {
+        // Move to legislative phase
+        gameState.phase = GAME_PHASES.LEGISLATIVE;
+        const policies = game.policyDeck.draw(3);
+        gameState.legislativeTracker.drawnPolicies = policies;
+        
+        io.to(lobbyCode).emit('electionResult', {
+          result: 'ja',
+          phase: GAME_PHASES.LEGISLATIVE,
+          policies: policies
+        });
+      } else {
+        // Failed election
+        gameState.failedElections++;
+        if (gameState.failedElections >= 3) {
+          // Enact top policy
+          const policy = game.policyDeck.draw(1)[0];
+          gameState.enactPolicy(policy);
+          gameState.failedElections = 0;
+          
+          const victory = gameState.checkVictory();
+          if (victory) {
+            io.to(lobbyCode).emit('gameOver', victory);
+          } else {
+            io.to(lobbyCode).emit('policyEnacted', {
+              policy,
+              enactedPolicies: gameState.enactedPolicies
+            });
+          }
+        }
+        
+        // Start new election
+        gameState.resetElection();
+        const nextPresident = gameState.getNextPresident();
+        io.to(lobbyCode).emit('electionResult', {
+          result: 'nein',
+          nextPresident,
+          phase: GAME_PHASES.ELECTION
+        });
+      }
+    }
+  });
+
+  socket.on('discardPolicy', ({ lobbyCode, policy }) => {
+    const game = games.get(lobbyCode);
+    if (!game) return;
+
+    const { gameState, policyDeck } = game;
+    gameState.legislativeTracker.discardedPolicies.push(policy);
+    game.policyDeck.discard(policy);
+
+    // If president discarded, send remaining policies to chancellor
+    if (gameState.legislativeTracker.discardedPolicies.length === 1) {
+      const remainingPolicies = gameState.legislativeTracker.drawnPolicies
+        .filter(p => !gameState.legislativeTracker.discardedPolicies.includes(p));
+      
+      io.to(gameState.electionTracker.chancellor).emit('chancellorChoose', {
+        policies: remainingPolicies
+      });
+    }
+    // If chancellor discarded, enact the remaining policy
+    else {
+      const enactedPolicy = gameState.legislativeTracker.drawnPolicies
+        .find(p => !gameState.legislativeTracker.discardedPolicies.includes(p));
+      
+      gameState.enactPolicy(enactedPolicy);
+      gameState.resetLegislative();
+      gameState.resetElection();
+
+      const victory = gameState.checkVictory();
+      if (victory) {
+        io.to(lobbyCode).emit('gameOver', victory);
+      } else {
+        io.to(lobbyCode).emit('policyEnacted', {
+          policy: enactedPolicy,
+          enactedPolicies: gameState.enactedPolicies
+        });
+
+        // Start new election
+        const nextPresident = gameState.getNextPresident();
+        io.to(lobbyCode).emit('newElection', {
+          president: nextPresident,
+          phase: GAME_PHASES.ELECTION
+        });
+      }
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     // Find and remove player from any lobby they're in
@@ -78,6 +232,7 @@ io.on('connection', (socket) => {
         lobby.players.splice(playerIndex, 1);
         if (lobby.players.length === 0) {
           lobbies.delete(code);
+          games.delete(code);
         } else if (lobby.host === socket.id) {
           // Assign new host if the host left
           lobby.host = lobby.players[0].id;

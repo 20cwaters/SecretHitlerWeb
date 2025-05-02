@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import NameInput from './components/NameInput';
 import Lobby from './components/Lobby';
+import Game from './components/Game';
 import CreateLobby from './components/CreateLobby';
 import JoinLobby from './components/JoinLobby';
 
@@ -14,6 +15,8 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [currentLobby, setCurrentLobby] = useState(null);
   const [error, setError] = useState('');
+  const [role, setRole] = useState(null);
+  const [gameStarted, setGameStarted] = useState(false);
 
   useEffect(() => {
     socket.on('error', (data) => {
@@ -32,11 +35,21 @@ function App() {
       setCurrentLobby(lobby);
     });
 
+    socket.on('roleAssigned', (roleInfo) => {
+      setRole(roleInfo);
+    });
+
+    socket.on('gameStarted', () => {
+      setGameStarted(true);
+    });
+
     return () => {
       socket.off('error');
       socket.off('lobbyCreated');
       socket.off('playerJoined');
       socket.off('playerLeft');
+      socket.off('roleAssigned');
+      socket.off('gameStarted');
     };
   }, []);
 
@@ -54,6 +67,10 @@ function App() {
 
   if (!playerName) {
     return <NameInput onSubmit={handleNameSubmit} />;
+  }
+
+  if (gameStarted && role) {
+    return <Game socket={socket} lobby={currentLobby} playerName={playerName} role={role} />;
   }
 
   if (currentLobby) {
