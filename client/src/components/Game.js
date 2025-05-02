@@ -7,16 +7,26 @@ const GAME_PHASES = {
   GAME_OVER: 'game_over'
 };
 
-function Game({ socket, lobby, playerName, role }) {
-  const [gameState, setGameState] = useState(null);
-  const [phase, setPhase] = useState(GAME_PHASES.ELECTION);
+function Game({ socket, lobby, playerName, role, initialGameState }) {
+  const [gameState, setGameState] = useState(initialGameState);
+  const [phase, setPhase] = useState(initialGameState?.phase || GAME_PHASES.ELECTION);
   const [enactedPolicies, setEnactedPolicies] = useState({ liberal: 0, fascist: 0 });
   const [policies, setPolicies] = useState([]);
-  const [isPresident, setIsPresident] = useState(false);
+  const [isPresident, setIsPresident] = useState(initialGameState?.president?.id === socket.id);
   const [isChancellor, setIsChancellor] = useState(false);
-  const [currentPresident, setCurrentPresident] = useState(null);
-  const [currentChancellor, setCurrentChancellor] = useState(null);
+  const [currentPresident, setCurrentPresident] = useState(initialGameState?.currentPresident || null);
+  const [currentChancellor, setCurrentChancellor] = useState(initialGameState?.currentChancellor || null);
   const [waitingForChancellor, setWaitingForChancellor] = useState(true);
+
+  useEffect(() => {
+    if (initialGameState) {
+      setGameState(initialGameState);
+      setPhase(initialGameState.phase);
+      setIsPresident(initialGameState.president.id === socket.id);
+      setCurrentPresident(initialGameState.currentPresident);
+      setCurrentChancellor(initialGameState.currentChancellor);
+    }
+  }, [initialGameState, socket.id]);
 
   useEffect(() => {
     socket.on('gameStarted', (state) => {

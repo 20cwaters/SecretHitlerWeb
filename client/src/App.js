@@ -17,6 +17,7 @@ function App() {
   const [error, setError] = useState('');
   const [role, setRole] = useState(null);
   const [gameStarted, setGameStarted] = useState(false);
+  const [gameState, setGameState] = useState(null);
 
   useEffect(() => {
     socket.on('error', (data) => {
@@ -39,8 +40,9 @@ function App() {
       setRole(roleInfo);
     });
 
-    socket.on('gameStarted', () => {
+    socket.on('gameStarted', (state) => {
       setGameStarted(true);
+      setGameState(state);
     });
 
     return () => {
@@ -70,7 +72,7 @@ function App() {
   }
 
   if (gameStarted && role) {
-    return <Game socket={socket} lobby={currentLobby} playerName={playerName} role={role} />;
+    return <Game socket={socket} lobby={currentLobby} playerName={playerName} role={role} initialGameState={gameState} />;
   }
 
   if (currentLobby) {
