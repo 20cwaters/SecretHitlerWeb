@@ -225,7 +225,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
   };
 
   const renderLegislativePhase = () => {
-    if (isPresident && policies.length > 0 && !hasDiscarded) {
+    if (isPresident && Array.isArray(policies) && policies.length > 0 && !hasDiscarded) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You are the President</h3>
@@ -257,7 +257,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       );
     }
 
-    if (isChancellor && chancellorPolicies.length > 0) {
+    if (isChancellor && Array.isArray(chancellorPolicies) && chancellorPolicies.length > 0) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You are the Chancellor</h3>
@@ -279,7 +279,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       );
     }
 
-    if (isChancellor && chancellorPolicies.length === 0) {
+    if (isChancellor && (!chancellorPolicies || chancellorPolicies.length === 0)) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You are the Chancellor</h3>
