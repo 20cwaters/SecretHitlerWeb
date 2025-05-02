@@ -13,6 +13,11 @@ app.use(cors());
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
+  
+  // Catch-all route to serve the React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+  });
 }
 
 const server = http.createServer(app);
@@ -326,13 +331,6 @@ io.on('connection', (socket) => {
     }
   });
 });
-
-// Serve the React app in production
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
-  });
-}
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
