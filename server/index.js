@@ -263,6 +263,12 @@ io.on('connection', (socket) => {
         policies: remainingPolicies
       });
 
+      // Notify the president that their discard was successful
+      socket.emit('presidentDiscardConfirmed', {
+        discardedPolicy: policy,
+        remainingPolicies: remainingPolicies
+      });
+
       // Notify other players that the president has discarded
       socket.to(lobbyCode).emit('presidentDiscarded');
     }

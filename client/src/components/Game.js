@@ -41,6 +41,11 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       setWaitingForChancellor(true);
     });
 
+    socket.on('presidentDiscardConfirmed', (data) => {
+      setHasDiscarded(true);
+      setPolicies([]);
+    });
+
     socket.on('chancellorNominated', (state) => {
       setGameState(state);
       setIsChancellor(state.chancellor === socket.id);
@@ -104,6 +109,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
 
     return () => {
       socket.off('gameStarted');
+      socket.off('presidentDiscardConfirmed');
       socket.off('chancellorNominated');
       socket.off('electionResult');
       socket.off('chancellorChoose');
@@ -125,7 +131,6 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
 
   const handleDiscardPolicy = (policy) => {
     socket.emit('discardPolicy', { lobbyCode: lobby.code, policy });
-    setHasDiscarded(true);
   };
 
   const handleEnactPolicy = (policy) => {
