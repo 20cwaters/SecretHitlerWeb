@@ -103,6 +103,8 @@ io.on('connection', (socket) => {
       // Start election phase
       const president = gameState.getCurrentPresident();
       gameState.electionTracker.president = president.id;
+      
+      // Notify all players that the game has started and who the first president is
       io.to(lobbyCode).emit('gameStarted', {
         president: president,
         phase: GAME_PHASES.ELECTION,
@@ -133,13 +135,16 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Set the chancellor candidate
     gameState.setChancellorCandidate(chancellorId);
+    const chancellorCandidate = gameState.players.find(p => p.id === chancellorId);
     
+    // Notify all players about the nomination
     io.to(lobbyCode).emit('chancellorNominated', {
       chancellor: chancellorId,
       phase: GAME_PHASES.ELECTION,
       currentPresident: currentPresident,
-      currentChancellor: gameState.players.find(p => p.id === chancellorId)
+      currentChancellor: chancellorCandidate
     });
   });
 
@@ -167,8 +172,11 @@ io.on('connection', (socket) => {
     const allVotesIn = Object.keys(gameState.electionTracker.votes).length === gameState.players.length;
     if (allVotesIn) {
       const result = gameState.getVoteResult();
+      const currentPresident = gameState.getCurrentPresident();
+      const chancellorCandidate = gameState.players.find(p => p.id === gameState.electionTracker.chancellor);
+
       if (result) {
-        // Move to legislative phase
+        // Election succeeded
         gameState.phase = GAME_PHASES.LEGISLATIVE;
         const policies = game.policyDeck.draw(3);
         gameState.legislativeTracker.drawnPolicies = policies;
@@ -179,11 +187,11 @@ io.on('connection', (socket) => {
           result: 'ja',
           phase: GAME_PHASES.LEGISLATIVE,
           policies: policies,
-          currentPresident: gameState.players.find(p => p.id === gameState.electionTracker.president),
-          currentChancellor: gameState.players.find(p => p.id === gameState.electionTracker.chancellor)
+          currentPresident: currentPresident,
+          currentChancellor: chancellorCandidate
         });
       } else {
-        // Failed election
+        // Election failed
         gameState.failedElections++;
         if (gameState.failedElections >= 3) {
           // Enact top policy
@@ -206,9 +214,9 @@ io.on('connection', (socket) => {
         gameState.resetElection();
         const nextPresident = gameState.getNextPresident();
         gameState.electionTracker.president = nextPresident.id;
+        
         io.to(lobbyCode).emit('electionResult', {
           result: 'nein',
-          nextPresident,
           phase: GAME_PHASES.ELECTION,
           currentPresident: nextPresident,
           currentChancellor: null

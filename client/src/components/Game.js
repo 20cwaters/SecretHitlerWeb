@@ -16,6 +16,7 @@ function Game({ socket, lobby, playerName, role }) {
   const [isChancellor, setIsChancellor] = useState(false);
   const [currentPresident, setCurrentPresident] = useState(null);
   const [currentChancellor, setCurrentChancellor] = useState(null);
+  const [waitingForChancellor, setWaitingForChancellor] = useState(true);
 
   useEffect(() => {
     socket.on('gameStarted', (state) => {
@@ -24,12 +25,14 @@ function Game({ socket, lobby, playerName, role }) {
       setIsPresident(state.president.id === socket.id);
       setCurrentPresident(state.currentPresident);
       setCurrentChancellor(state.currentChancellor);
+      setWaitingForChancellor(true);
     });
 
     socket.on('chancellorNominated', (state) => {
       setGameState(state);
       setIsChancellor(state.chancellor === socket.id);
       setCurrentChancellor(lobby.players.find(p => p.id === state.chancellor));
+      setWaitingForChancellor(false);
     });
 
     socket.on('electionResult', (result) => {
@@ -39,6 +42,14 @@ function Game({ socket, lobby, playerName, role }) {
       }
       if (result.nextPresident) {
         setCurrentPresident(result.nextPresident);
+        setCurrentChancellor(null);
+        setWaitingForChancellor(true);
+      }
+      if (result.currentPresident) {
+        setCurrentPresident(result.currentPresident);
+      }
+      if (result.currentChancellor) {
+        setCurrentChancellor(result.currentChancellor);
       }
     });
 
@@ -78,7 +89,7 @@ function Game({ socket, lobby, playerName, role }) {
   };
 
   const renderElectionPhase = () => {
-    if (isPresident) {
+    if (isPresident && waitingForChancellor) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You are the President</h3>
@@ -100,7 +111,7 @@ function Game({ socket, lobby, playerName, role }) {
       );
     }
 
-    if (isChancellor) {
+    if (isChancellor && waitingForChancellor) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You have been nominated as Chancellor</h3>
@@ -109,23 +120,33 @@ function Game({ socket, lobby, playerName, role }) {
       );
     }
 
+    if (!waitingForChancellor) {
+      return (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Vote on Chancellor Nomination</h3>
+          <p className="mb-4">President {currentPresident?.name} has nominated {currentChancellor?.name} as Chancellor</p>
+          <div className="flex space-x-4">
+            <button
+              onClick={() => handleVote('ja')}
+              className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
+            >
+              Ja
+            </button>
+            <button
+              onClick={() => handleVote('nein')}
+              className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700"
+            >
+              Nein
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div>
-        <h3 className="text-lg font-semibold mb-4">Vote on the Chancellor</h3>
-        <div className="flex space-x-4">
-          <button
-            onClick={() => handleVote('ja')}
-            className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
-          >
-            Ja
-          </button>
-          <button
-            onClick={() => handleVote('nein')}
-            className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700"
-          >
-            Nein
-          </button>
-        </div>
+        <h3 className="text-lg font-semibold mb-4">Election Phase</h3>
+        <p>Waiting for President {currentPresident?.name} to nominate a Chancellor...</p>
       </div>
     );
   };
