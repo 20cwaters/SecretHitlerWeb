@@ -135,8 +135,9 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Set the chancellor candidate
+    // Set the chancellor candidate and reset votes
     gameState.setChancellorCandidate(chancellorId);
+    gameState.electionTracker.votes = {};
     const chancellorCandidate = gameState.players.find(p => p.id === chancellorId);
     
     // Notify all players about the nomination
@@ -183,10 +184,15 @@ io.on('connection', (socket) => {
         gameState.legislativeTracker.president = gameState.electionTracker.president;
         gameState.legislativeTracker.chancellor = gameState.electionTracker.chancellor;
         
+        // Send policies only to the president
+        io.to(currentPresident.id).emit('presidentDraw', {
+          policies: policies
+        });
+        
+        // Notify all players of the successful election
         io.to(lobbyCode).emit('electionResult', {
           result: 'ja',
           phase: GAME_PHASES.LEGISLATIVE,
-          policies: policies,
           currentPresident: currentPresident,
           currentChancellor: chancellorCandidate
         });

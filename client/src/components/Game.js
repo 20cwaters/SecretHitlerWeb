@@ -19,6 +19,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
   const [waitingForChancellor, setWaitingForChancellor] = useState(true);
   const [hasVoted, setHasVoted] = useState(false);
   const [chancellorPolicies, setChancellorPolicies] = useState([]);
+  const [hasDiscarded, setHasDiscarded] = useState(false);
 
   useEffect(() => {
     if (initialGameState) {
@@ -45,6 +46,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       setIsChancellor(state.chancellor === socket.id);
       setCurrentChancellor(lobby.players.find(p => p.id === state.chancellor));
       setWaitingForChancellor(false);
+      setHasVoted(false);
     });
 
     socket.on('electionResult', (result) => {
@@ -59,9 +61,11 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       }
       if (result.currentPresident) {
         setCurrentPresident(result.currentPresident);
+        setIsPresident(result.currentPresident.id === socket.id);
       }
       if (result.currentChancellor) {
         setCurrentChancellor(result.currentChancellor);
+        setIsChancellor(result.currentChancellor.id === socket.id);
       }
     });
 
@@ -84,11 +88,18 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       setWaitingForChancellor(true);
       setPolicies([]);
       setChancellorPolicies([]);
+      setHasDiscarded(false);
+      setHasVoted(false);
     });
 
     socket.on('gameOver', (result) => {
       setPhase(GAME_PHASES.GAME_OVER);
       setGameState({ ...gameState, result });
+    });
+
+    socket.on('presidentDraw', (data) => {
+      setPolicies(data.policies);
+      setPhase(GAME_PHASES.LEGISLATIVE);
     });
 
     return () => {
@@ -99,6 +110,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       socket.off('policyEnacted');
       socket.off('gameOver');
       socket.off('newElection');
+      socket.off('presidentDraw');
     };
   }, [socket, gameState]);
 
@@ -113,6 +125,8 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
 
   const handleDiscardPolicy = (policy) => {
     socket.emit('discardPolicy', { lobbyCode: lobby.code, policy });
+    setHasDiscarded(true);
+    setPolicies([]);
   };
 
   const renderVotingButtons = () => {
@@ -191,7 +205,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
   };
 
   const renderLegislativePhase = () => {
-    if (isPresident && policies.length > 0) {
+    if (isPresident && policies.length > 0 && !hasDiscarded) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You are the President</h3>
@@ -209,6 +223,15 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
               </button>
             ))}
           </div>
+        </div>
+      );
+    }
+
+    if (isPresident && hasDiscarded) {
+      return (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">You are the President</h3>
+          <p className="text-gray-600">You have discarded a policy. Waiting for the Chancellor to enact a policy...</p>
         </div>
       );
     }
