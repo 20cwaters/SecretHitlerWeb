@@ -14,23 +14,31 @@ function Game({ socket, lobby, playerName, role }) {
   const [policies, setPolicies] = useState([]);
   const [isPresident, setIsPresident] = useState(false);
   const [isChancellor, setIsChancellor] = useState(false);
+  const [currentPresident, setCurrentPresident] = useState(null);
+  const [currentChancellor, setCurrentChancellor] = useState(null);
 
   useEffect(() => {
     socket.on('gameStarted', (state) => {
       setGameState(state);
       setPhase(state.phase);
       setIsPresident(state.president.id === socket.id);
+      setCurrentPresident(state.currentPresident);
+      setCurrentChancellor(state.currentChancellor);
     });
 
     socket.on('chancellorNominated', (state) => {
       setGameState(state);
       setIsChancellor(state.chancellor === socket.id);
+      setCurrentChancellor(lobby.players.find(p => p.id === state.chancellor));
     });
 
     socket.on('electionResult', (result) => {
       setPhase(result.phase);
       if (result.phase === GAME_PHASES.LEGISLATIVE) {
         setPolicies(result.policies);
+      }
+      if (result.nextPresident) {
+        setCurrentPresident(result.nextPresident);
       }
     });
 
@@ -196,6 +204,14 @@ function Game({ socket, lobby, playerName, role }) {
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-2">Your Role</h3>
           <p className="capitalize">{role.role}</p>
+        </div>
+
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-2">Current Government</h3>
+          <div className="space-y-2">
+            <p>President: {currentPresident?.name || 'Not elected'}</p>
+            <p>Chancellor: {currentChancellor?.name || 'Not elected'}</p>
+          </div>
         </div>
 
         <div className="mb-6">

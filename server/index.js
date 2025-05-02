@@ -102,9 +102,12 @@ io.on('connection', (socket) => {
 
       // Start election phase
       const president = gameState.getCurrentPresident();
+      gameState.electionTracker.president = president.id;
       io.to(lobbyCode).emit('gameStarted', {
         president: president,
-        phase: GAME_PHASES.ELECTION
+        phase: GAME_PHASES.ELECTION,
+        currentPresident: president,
+        currentChancellor: null
       });
     } catch (error) {
       socket.emit('error', { message: error.message });
@@ -116,11 +119,27 @@ io.on('connection', (socket) => {
     if (!game) return;
 
     const { gameState } = game;
+    const currentPresident = gameState.getCurrentPresident();
+    
+    // Only allow the current president to nominate a chancellor
+    if (currentPresident.id !== socket.id) {
+      socket.emit('error', { message: 'Only the current president can nominate a chancellor' });
+      return;
+    }
+
+    // Cannot nominate yourself as chancellor
+    if (chancellorId === socket.id) {
+      socket.emit('error', { message: 'You cannot nominate yourself as chancellor' });
+      return;
+    }
+
     gameState.setChancellorCandidate(chancellorId);
     
     io.to(lobbyCode).emit('chancellorNominated', {
       chancellor: chancellorId,
-      phase: GAME_PHASES.ELECTION
+      phase: GAME_PHASES.ELECTION,
+      currentPresident: currentPresident,
+      currentChancellor: gameState.players.find(p => p.id === chancellorId)
     });
   });
 
@@ -129,6 +148,19 @@ io.on('connection', (socket) => {
     if (!game) return;
 
     const { gameState } = game;
+    
+    // Only allow voting if there's a nominated chancellor
+    if (!gameState.electionTracker.chancellor) {
+      socket.emit('error', { message: 'No chancellor has been nominated yet' });
+      return;
+    }
+
+    // Prevent double voting
+    if (gameState.electionTracker.votes[socket.id]) {
+      socket.emit('error', { message: 'You have already voted' });
+      return;
+    }
+
     gameState.castVote(socket.id, vote);
 
     // Check if all votes are in
@@ -140,11 +172,15 @@ io.on('connection', (socket) => {
         gameState.phase = GAME_PHASES.LEGISLATIVE;
         const policies = game.policyDeck.draw(3);
         gameState.legislativeTracker.drawnPolicies = policies;
+        gameState.legislativeTracker.president = gameState.electionTracker.president;
+        gameState.legislativeTracker.chancellor = gameState.electionTracker.chancellor;
         
         io.to(lobbyCode).emit('electionResult', {
           result: 'ja',
           phase: GAME_PHASES.LEGISLATIVE,
-          policies: policies
+          policies: policies,
+          currentPresident: gameState.players.find(p => p.id === gameState.electionTracker.president),
+          currentChancellor: gameState.players.find(p => p.id === gameState.electionTracker.chancellor)
         });
       } else {
         // Failed election
@@ -169,10 +205,13 @@ io.on('connection', (socket) => {
         // Start new election
         gameState.resetElection();
         const nextPresident = gameState.getNextPresident();
+        gameState.electionTracker.president = nextPresident.id;
         io.to(lobbyCode).emit('electionResult', {
           result: 'nein',
           nextPresident,
-          phase: GAME_PHASES.ELECTION
+          phase: GAME_PHASES.ELECTION,
+          currentPresident: nextPresident,
+          currentChancellor: null
         });
       }
     }
