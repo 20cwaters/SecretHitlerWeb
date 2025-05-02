@@ -126,7 +126,10 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
   const handleDiscardPolicy = (policy) => {
     socket.emit('discardPolicy', { lobbyCode: lobby.code, policy });
     setHasDiscarded(true);
-    setPolicies([]);
+  };
+
+  const handleEnactPolicy = (policy) => {
+    socket.emit('enactPolicy', { lobbyCode: lobby.code, policy });
   };
 
   const renderVotingButtons = () => {
@@ -245,7 +248,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
             {chancellorPolicies.map((policy, index) => (
               <button
                 key={index}
-                onClick={() => handleDiscardPolicy(policy)}
+                onClick={() => handleEnactPolicy(policy)}
                 className={`w-full py-2 px-4 rounded-md text-white ${
                   policy === 'liberal' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
                 }`}
