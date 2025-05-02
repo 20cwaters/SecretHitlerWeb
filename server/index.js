@@ -230,31 +230,44 @@ io.on('connection', (socket) => {
     if (!game) return;
 
     const { gameState, policyDeck } = game;
+    
+    // Add the discarded policy to the discard pile
     gameState.legislativeTracker.discardedPolicies.push(policy);
-    game.policyDeck.discard(policy);
+    policyDeck.discard(policy);
 
-    // If president discarded, send remaining policies to chancellor
+    // If president discarded (first discard)
     if (gameState.legislativeTracker.discardedPolicies.length === 1) {
+      // Get the remaining two policies
       const remainingPolicies = gameState.legislativeTracker.drawnPolicies
-        .filter(p => !gameState.legislativeTracker.discardedPolicies.includes(p));
+        .filter(p => p !== policy);
       
+      // Send the remaining policies to the chancellor
       io.to(gameState.electionTracker.chancellor).emit('chancellorChoose', {
         policies: remainingPolicies
       });
+
+      // Notify other players that the president has discarded
+      socket.to(lobbyCode).emit('presidentDiscarded');
     }
-    // If chancellor discarded, enact the remaining policy
-    else {
+    // If chancellor discarded (second discard)
+    else if (gameState.legislativeTracker.discardedPolicies.length === 2) {
+      // Get the remaining policy (the one to be enacted)
       const enactedPolicy = gameState.legislativeTracker.drawnPolicies
         .find(p => !gameState.legislativeTracker.discardedPolicies.includes(p));
       
+      // Enact the policy
       gameState.enactPolicy(enactedPolicy);
+      
+      // Reset for next round
       gameState.resetLegislative();
       gameState.resetElection();
 
+      // Check for victory
       const victory = gameState.checkVictory();
       if (victory) {
         io.to(lobbyCode).emit('gameOver', victory);
       } else {
+        // Notify all players of the enacted policy
         io.to(lobbyCode).emit('policyEnacted', {
           policy: enactedPolicy,
           enactedPolicies: gameState.enactedPolicies
@@ -262,9 +275,13 @@ io.on('connection', (socket) => {
 
         // Start new election
         const nextPresident = gameState.getNextPresident();
+        gameState.electionTracker.president = nextPresident.id;
+        
         io.to(lobbyCode).emit('newElection', {
           president: nextPresident,
-          phase: GAME_PHASES.ELECTION
+          phase: GAME_PHASES.ELECTION,
+          currentPresident: nextPresident,
+          currentChancellor: null
         });
       }
     }

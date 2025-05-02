@@ -17,6 +17,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
   const [currentPresident, setCurrentPresident] = useState(initialGameState?.currentPresident || null);
   const [currentChancellor, setCurrentChancellor] = useState(initialGameState?.currentChancellor || null);
   const [waitingForChancellor, setWaitingForChancellor] = useState(true);
+  const [hasVoted, setHasVoted] = useState(false);
 
   useEffect(() => {
     if (initialGameState) {
@@ -65,6 +66,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
 
     socket.on('chancellorChoose', (data) => {
       setPolicies(data.policies);
+      setPhase(GAME_PHASES.LEGISLATIVE);
     });
 
     socket.on('policyEnacted', (data) => {
@@ -92,10 +94,36 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
 
   const handleVote = (vote) => {
     socket.emit('castVote', { lobbyCode: lobby.code, vote });
+    setHasVoted(true);
   };
 
   const handleDiscardPolicy = (policy) => {
     socket.emit('discardPolicy', { lobbyCode: lobby.code, policy });
+  };
+
+  const renderVotingButtons = () => {
+    if (hasVoted) {
+      return (
+        <p className="text-gray-600 italic">Vote submitted. Waiting for other players...</p>
+      );
+    }
+
+    return (
+      <div className="flex space-x-4">
+        <button
+          onClick={() => handleVote('ja')}
+          className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
+        >
+          Ja
+        </button>
+        <button
+          onClick={() => handleVote('nein')}
+          className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700"
+        >
+          Nein
+        </button>
+      </div>
+    );
   };
 
   const renderElectionPhase = () => {
@@ -135,20 +163,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
         <div>
           <h3 className="text-lg font-semibold mb-4">Vote on Chancellor Nomination</h3>
           <p className="mb-4">President {currentPresident?.name} has nominated {currentChancellor?.name} as Chancellor</p>
-          <div className="flex space-x-4">
-            <button
-              onClick={() => handleVote('ja')}
-              className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
-            >
-              Ja
-            </button>
-            <button
-              onClick={() => handleVote('nein')}
-              className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700"
-            >
-              Nein
-            </button>
-          </div>
+          {renderVotingButtons()}
         </div>
       );
     }
@@ -166,13 +181,15 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You are the President</h3>
-          <p className="mb-4">Choose a policy to discard:</p>
+          <p className="mb-4">Choose a policy to discard. The remaining two will be passed to the Chancellor:</p>
           <div className="space-y-2">
             {policies.map((policy, index) => (
               <button
                 key={index}
                 onClick={() => handleDiscardPolicy(policy)}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
+                className={`w-full py-2 px-4 rounded-md text-white ${
+                  policy === 'liberal' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
               >
                 Discard {policy} Policy
               </button>
@@ -186,15 +203,17 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       return (
         <div>
           <h3 className="text-lg font-semibold mb-4">You are the Chancellor</h3>
-          <p className="mb-4">Choose a policy to enact:</p>
+          <p className="mb-4">Choose a policy to discard. The remaining policy will be enacted:</p>
           <div className="space-y-2">
             {policies.map((policy, index) => (
               <button
                 key={index}
                 onClick={() => handleDiscardPolicy(policy)}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
+                className={`w-full py-2 px-4 rounded-md text-white ${
+                  policy === 'liberal' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
               >
-                Enact {policy} Policy
+                Discard {policy} Policy
               </button>
             ))}
           </div>
@@ -205,7 +224,15 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
     return (
       <div>
         <h3 className="text-lg font-semibold mb-4">Legislative Phase</h3>
-        <p>Waiting for President and Chancellor to enact a policy...</p>
+        {currentPresident && currentChancellor && (
+          <div>
+            <p>President {currentPresident.name} and Chancellor {currentChancellor.name} are enacting a policy:</p>
+            <ol className="list-decimal list-inside mt-2 space-y-1 text-gray-600">
+              <li>President draws 3 policies and discards one</li>
+              <li>Chancellor receives 2 policies and enacts one</li>
+            </ol>
+          </div>
+        )}
       </div>
     );
   };
