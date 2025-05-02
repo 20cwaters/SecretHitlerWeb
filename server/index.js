@@ -231,12 +231,18 @@ io.on('connection', (socket) => {
 
     const { gameState, policyDeck } = game;
     
-    // Add the discarded policy to the discard pile
-    gameState.legislativeTracker.discardedPolicies.push(policy);
-    policyDeck.discard(policy);
+    // If it's the president's turn (first discard)
+    if (gameState.legislativeTracker.discardedPolicies.length === 0) {
+      // Verify it's the president
+      if (socket.id !== gameState.electionTracker.president) {
+        socket.emit('error', { message: 'Only the president can discard a policy at this time' });
+        return;
+      }
 
-    // If president discarded (first discard)
-    if (gameState.legislativeTracker.discardedPolicies.length === 1) {
+      // Add the discarded policy to the discard pile
+      gameState.legislativeTracker.discardedPolicies.push(policy);
+      policyDeck.discard(policy);
+
       // Get the remaining two policies
       const remainingPolicies = gameState.legislativeTracker.drawnPolicies
         .filter(p => p !== policy);
@@ -249,14 +255,22 @@ io.on('connection', (socket) => {
       // Notify other players that the president has discarded
       socket.to(lobbyCode).emit('presidentDiscarded');
     }
-    // If chancellor discarded (second discard)
-    else if (gameState.legislativeTracker.discardedPolicies.length === 2) {
-      // Get the remaining policy (the one to be enacted)
-      const enactedPolicy = gameState.legislativeTracker.drawnPolicies
-        .find(p => !gameState.legislativeTracker.discardedPolicies.includes(p));
+    // If it's the chancellor's turn (enacting a policy)
+    else if (gameState.legislativeTracker.discardedPolicies.length === 1) {
+      // Verify it's the chancellor
+      if (socket.id !== gameState.electionTracker.chancellor) {
+        socket.emit('error', { message: 'Only the chancellor can enact a policy at this time' });
+        return;
+      }
+
+      // Enact the chosen policy
+      gameState.enactPolicy(policy);
       
-      // Enact the policy
-      gameState.enactPolicy(enactedPolicy);
+      // Add the other policy to the discard pile
+      const otherPolicy = gameState.legislativeTracker.drawnPolicies
+        .find(p => p !== policy && !gameState.legislativeTracker.discardedPolicies.includes(p));
+      gameState.legislativeTracker.discardedPolicies.push(otherPolicy);
+      policyDeck.discard(otherPolicy);
       
       // Reset for next round
       gameState.resetLegislative();
@@ -269,7 +283,7 @@ io.on('connection', (socket) => {
       } else {
         // Notify all players of the enacted policy
         io.to(lobbyCode).emit('policyEnacted', {
-          policy: enactedPolicy,
+          policy: policy,
           enactedPolicies: gameState.enactedPolicies
         });
 
@@ -278,7 +292,6 @@ io.on('connection', (socket) => {
         gameState.electionTracker.president = nextPresident.id;
         
         io.to(lobbyCode).emit('newElection', {
-          president: nextPresident,
           phase: GAME_PHASES.ELECTION,
           currentPresident: nextPresident,
           currentChancellor: null
