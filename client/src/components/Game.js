@@ -59,7 +59,6 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
     socket.on('electionResult', (result) => {
       setPhase(result.phase);
       if (result.phase === GAME_PHASES.LEGISLATIVE) {
-        setPolicies(result.policies);
         setHasDiscarded(false);
       }
       if (result.nextPresident) {
@@ -110,6 +109,7 @@ function Game({ socket, lobby, playerName, role, initialGameState }) {
       setPolicies(data.policies);
       setPhase(GAME_PHASES.LEGISLATIVE);
       setHasDiscarded(false);
+      setIsPresident(true);
     });
 
     socket.on('error', (error) => {
